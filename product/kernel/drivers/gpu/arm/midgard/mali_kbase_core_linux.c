@@ -4507,31 +4507,31 @@ int power_control_init(struct kbase_device *kbdev)
 
 	pdev = to_platform_device(kbdev->dev);
 
-#if defined(CONFIG_REGULATOR)
-	/* Since the error code EPROBE_DEFER causes the entire probing
-	 * procedure to be restarted from scratch at a later time,
-	 * all regulators will be released before returning.
-	 *
-	 * Any other error is ignored and the driver will continue
-	 * operating with a partial initialization of regulators.
-	 */
-	for (i = 0; i < BASE_MAX_NR_CLOCKS_REGULATORS; i++) {
-		kbdev->regulators[i] = regulator_get_optional(kbdev->dev, regulator_names[i]);
-		if (IS_ERR(kbdev->regulators[i])) {
-			err = PTR_ERR(kbdev->regulators[i]);
-			kbdev->regulators[i] = NULL;
-			break;
-		}
-	}
-	if (err == -EPROBE_DEFER) {
-		while (i > 0)
-			regulator_put(kbdev->regulators[--i]);
-		return err;
-	}
+// #if defined(CONFIG_REGULATOR)
+// 	/* Since the error code EPROBE_DEFER causes the entire probing
+// 	 * procedure to be restarted from scratch at a later time,
+// 	 * all regulators will be released before returning.
+// 	 *
+// 	 * Any other error is ignored and the driver will continue
+// 	 * operating with a partial initialization of regulators.
+// 	 */
+// 	for (i = 0; i < BASE_MAX_NR_CLOCKS_REGULATORS; i++) {
+// 		kbdev->regulators[i] = regulator_get_optional(kbdev->dev, regulator_names[i]);
+// 		if (IS_ERR(kbdev->regulators[i])) {
+// 			err = PTR_ERR(kbdev->regulators[i]);
+// 			kbdev->regulators[i] = NULL;
+// 			break;
+// 		}
+// 	}
+// 	if (err == -EPROBE_DEFER) {
+// 		while (i > 0)
+// 			regulator_put(kbdev->regulators[--i]);
+// 		return err;
+// 	}
 
-	kbdev->nr_regulators = i;
-	dev_dbg(&pdev->dev, "Regulators probed: %u\n", kbdev->nr_regulators);
-#endif
+// 	kbdev->nr_regulators = i;
+// 	dev_dbg(&pdev->dev, "Regulators probed: %u\n", kbdev->nr_regulators);
+// #endif
 
 	/* Having more clocks than regulators is acceptable, while the
 	 * opposite shall not happen.
