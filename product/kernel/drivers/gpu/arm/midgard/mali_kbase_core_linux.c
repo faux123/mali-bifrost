@@ -4544,7 +4544,7 @@ int power_control_init(struct kbase_device *kbdev)
 	 * operating with a partial initialization of clocks.
 	 */
 	for (i = 0; i < BASE_MAX_NR_CLOCKS_REGULATORS; i++) {
-		kbdev->clocks[i] = of_clk_get_by_name(kbdev->dev->of_node, "bus");
+		kbdev->clocks[i] = of_clk_get(kbdev->dev->of_node, (int)i);
 		if (IS_ERR(kbdev->clocks[i])) {
 			err = PTR_ERR(kbdev->clocks[i]);
 			kbdev->clocks[i] = NULL;
