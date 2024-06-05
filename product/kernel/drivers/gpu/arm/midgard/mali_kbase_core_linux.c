@@ -4528,9 +4528,26 @@ int power_control_init(struct kbase_device *kbdev)
 // 			regulator_put(kbdev->regulators[--i]);
 // 		return err;
 // 	}
+	kbdev->regulators[0] = devm_regulator_get_optional(kbdev->dev, regulator_names[0]);
 
-// 	kbdev->nr_regulators = i;
-// 	dev_dbg(&pdev->dev, "Regulators probed: %u\n", kbdev->nr_regulators);
+	if (IS_ERR(kbdev->regulators[0])) {
+		pr_err("regulator_get: has error\n");
+		err = PTR_ERR(kbdev->regulators[0]);
+		kbdev->regulators[0] = NULL;
+	 	kbdev->nr_regulators = 0;
+	} else {
+	 	kbdev->nr_regulators = 1;
+
+		err = regulator_enable(kbdev->regulators[0]);
+		if (err)
+			dev_dbg(&pdev->dev, "regulator_enable failed\n");
+		else
+			pr_err("regulator_enabled\n");
+	}
+
+	dev_dbg(&pdev->dev, "Regulators probed: %u\n", kbdev->nr_regulators);
+	pr_err("mali regulator probed\n");
+
 // #endif
 
 	/* Having more clocks than regulators is acceptable, while the
@@ -4543,30 +4560,59 @@ int power_control_init(struct kbase_device *kbdev)
 	 * Any other error is ignored and the driver will continue
 	 * operating with a partial initialization of clocks.
 	 */
-	for (i = 0; i < BASE_MAX_NR_CLOCKS_REGULATORS; i++) {
-		kbdev->clocks[i] = of_clk_get(kbdev->dev->of_node, (int)i);
-		if (IS_ERR(kbdev->clocks[i])) {
-			err = PTR_ERR(kbdev->clocks[i]);
-			kbdev->clocks[i] = NULL;
-			break;
-		}
 
-		err = clk_prepare_enable(kbdev->clocks[i]);
-		if (err) {
-			dev_err(kbdev->dev, "Failed to prepare and enable clock (%d)\n", err);
-			clk_put(kbdev->clocks[i]);
-			break;
-		}
-	}
-	if (err == -EPROBE_DEFER) {
-		while (i > 0) {
-			clk_disable_unprepare(kbdev->clocks[--i]);
-			clk_put(kbdev->clocks[i]);
-		}
-		goto clocks_probe_defer;
+	/* HACK: Grab existing platform GPU clock */
+	kbdev->clocks[0] = devm_clk_get_optional(kbdev->dev, NULL);
+	if (!IS_ERR(kbdev->clocks[0]))
+		pr_err("clk_get: %s\n", __clk_get_name(kbdev->clocks[0]));
+	else
+		pr_err("clk_get: is NULL");
+
+	/* if platform device is enabled, disable it now */
+	//if (__clk_is_enabled(kbdev->clocks[0])) {
+	//	pr_err("__clk_is_enabled: %s\n", __clk_get_name(kbdev->clocks[0]));
+	//	clk_disable(kbdev->clocks[0]);
+	//}
+	/* delete from clk tree */
+	//clk_unprepare(kbdev->clocks[0]);
+	//clk_put(kbdev->clocks[0]);
+
+	/* now grab the gpu clock node from device tree definition */
+	//kbdev->clocks[0] = of_clk_get_by_name(kbdev->dev->of_node, "gpu");
+	//pr_err("of_clk_get_by_name: %s\n", __clk_get_name(kbdev->clocks[0]));
+
+	/* we are kinda commited here.. if this fails, the system will lock up */
+	err = clk_prepare_enable(kbdev->clocks[0]);
+	if (err) {
+	 		dev_err(kbdev->dev, "Failed to prepare and enable clock (%d)\n", err);
+			pr_err("Failed to prepare and enable clock (%d)\n", err);
+	 		clk_put(kbdev->clocks[0]);
 	}
 
-	kbdev->nr_clocks = i;
+	// for (i = 0; i < BASE_MAX_NR_CLOCKS_REGULATORS; i++) {
+	// 	kbdev->clocks[i] = of_clk_get(kbdev->dev->of_node, (int)i);
+	// 	if (IS_ERR(kbdev->clocks[i])) {
+	// 		err = PTR_ERR(kbdev->clocks[i]);
+	// 		kbdev->clocks[i] = NULL;
+	// 		break;
+	// 	}
+
+	// 	err = clk_prepare_enable(kbdev->clocks[i]);
+	// 	if (err) {
+	// 		dev_err(kbdev->dev, "Failed to prepare and enable clock (%d)\n", err);
+	// 		clk_put(kbdev->clocks[i]);
+	// 		break;
+	// 	}
+	// }
+	// if (err == -EPROBE_DEFER) {
+	// 	while (i > 0) {
+	// 		clk_disable_unprepare(kbdev->clocks[--i]);
+	// 		clk_put(kbdev->clocks[i]);
+	// 	}
+	// 	goto clocks_probe_defer;
+	// }
+
+	kbdev->nr_clocks = 1;
 	dev_dbg(&pdev->dev, "Clocks probed: %u\n", kbdev->nr_clocks);
 
 	/* Any error in parsing the OPP table from the device file
@@ -4579,8 +4625,10 @@ int power_control_init(struct kbase_device *kbdev)
 #if (KERNEL_VERSION(6, 0, 0) <= LINUX_VERSION_CODE)
 	if (kbdev->nr_regulators > 0) {
 		kbdev->token = dev_pm_opp_set_regulators(kbdev->dev, regulator_names);
+		pr_err("dev_pm_opp_set_regulators: called\n");
 
 		if (kbdev->token < 0) {
+			pr_err("dev_pm_opp_set_regulators: token < 0\n");
 			err = kbdev->token;
 			goto regulators_probe_defer;
 		}
@@ -4589,8 +4637,10 @@ int power_control_init(struct kbase_device *kbdev)
 	if (kbdev->nr_regulators > 0) {
 		kbdev->opp_table = dev_pm_opp_set_regulators(kbdev->dev, regulator_names,
 							     BASE_MAX_NR_CLOCKS_REGULATORS);
+		pr_err("dev_pm_opp_set_regulators: called\n");
 
 		if (IS_ERR(kbdev->opp_table)) {
+			pr_err("dev_pm_opp_set_regulators: opp_table error\n");
 			err = PTR_ERR(kbdev->opp_table);
 			goto regulators_probe_defer;
 		}
@@ -4598,8 +4648,13 @@ int power_control_init(struct kbase_device *kbdev)
 #endif /* (KERNEL_VERSION(6, 0, 0) <= LINUX_VERSION_CODE) */
 #endif /* CONFIG_REGULATOR */
 	err = dev_pm_opp_of_add_table(kbdev->dev);
+	pr_err("dev_pm_opp_of_add_table: called\n");
+
+	if (err)
+		pr_err("dev_pm_opp_of_add_table: opp_table add error\n");
 	CSTD_UNUSED(err);
 #endif /* CONFIG_PM_OPP */
+	pr_err("end of power_control_init\n");
 	return 0;
 
 #if defined(CONFIG_PM_OPP) && \
